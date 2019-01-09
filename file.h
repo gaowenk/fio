@@ -10,6 +10,9 @@
 #include "lib/lfsr.h"
 #include "lib/gauss.h"
 
+/* Forward declarations */
+struct zoned_block_device_info;
+
 /*
  * The type of object we are working on
  */
@@ -86,7 +89,6 @@ struct fio_file {
 	 */
 	unsigned int major, minor;
 	int fileno;
-	int bs;
 	char *file_name;
 
 	/*
@@ -96,6 +98,11 @@ struct fio_file {
 	uint64_t real_file_size;
 	uint64_t file_offset;
 	uint64_t io_size;
+
+	/*
+	 * Zoned block device information. See also zonemode=zbd.
+	 */
+	struct zoned_block_device_info *zbd_info;
 
 	/*
 	 * Track last end and last start of IO for a given data direction
@@ -125,7 +132,7 @@ struct fio_file {
 	 * if io is protected by a semaphore, this is set
 	 */
 	union {
-		struct fio_mutex *lock;
+		struct fio_sem *lock;
 		struct fio_rwlock *rwlock;
 	};
 

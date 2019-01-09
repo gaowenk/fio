@@ -1,12 +1,10 @@
 #include <unistd.h>
-#include <fcntl.h>
 #include <string.h>
 #include <stdarg.h>
 #include <syslog.h>
 
 #include "fio.h"
-
-#define LOG_START_SZ		512
+#include "oslib/asprintf.h"
 
 size_t log_info_buf(const char *buf, size_t len)
 {
@@ -17,7 +15,7 @@ size_t log_info_buf(const char *buf, size_t len)
 		return 0;
 
 	if (is_backend) {
-		size_t ret = fio_server_text_output(FIO_LOG_INFO, buf, len);
+		ssize_t ret = fio_server_text_output(FIO_LOG_INFO, buf, len);
 		if (ret != -1)
 			return ret;
 	}
@@ -29,63 +27,14 @@ size_t log_info_buf(const char *buf, size_t len)
 		return fwrite(buf, len, 1, f_out);
 }
 
-static size_t valist_to_buf(char **buffer, const char *fmt, va_list src_args)
-{
-	size_t len, cur = LOG_START_SZ;
-	va_list args;
-
-	do {
-		*buffer = calloc(1, cur);
-		if (!*buffer)
-			return 0;
-
-		va_copy(args, src_args);
-		len = vsnprintf(*buffer, cur, fmt, args);
-		va_end(args);
-
-		if (len < cur)
-			break;
-
-		cur = len + 1;
-		free(*buffer);
-	} while (1);
-
-	return len;
-}
-
-/* allocate buffer, fill with prefix string followed by vararg string */
-static size_t prevalist_to_buf(char **buffer, const char *pre, int prelen,
-		const char *fmt, va_list src_args)
-{
-	size_t len, cur = LOG_START_SZ;
-	va_list args;
-
-	do {
-		*buffer = calloc(1, cur);
-		if (!*buffer)
-			return 0;
-
-		va_copy(args, src_args);
-		memcpy(*buffer, pre, prelen);
-		len = prelen + vsnprintf(*buffer + prelen, cur - prelen, fmt, args);
-		va_end(args);
-
-		if (len < cur)
-			break;
-
-		cur = len + 1;
-		free(*buffer);
-	} while (1);
-
-	return len;
-}
-
 size_t log_valist(const char *fmt, va_list args)
 {
 	char *buffer;
-	size_t len;
+	int len;
 
-	len = valist_to_buf(&buffer, fmt, args);
+	len = vasprintf(&buffer, fmt, args);
+	if (len < 0)
+		return 0;
 	len = log_info_buf(buffer, len);
 	free(buffer);
 
@@ -95,10 +44,8 @@ size_t log_valist(const char *fmt, va_list args)
 /* add prefix for the specified type in front of the valist */
 void log_prevalist(int type, const char *fmt, va_list args)
 {
-	char pre[32];
-	char *buffer;
-	size_t len;
-	int prelen;
+	char *buf1, *buf2;
+	int len;
 	pid_t pid;
 
 	pid = gettid();
@@ -106,18 +53,22 @@ void log_prevalist(int type, const char *fmt, va_list args)
 	    && pid != *fio_debug_jobp)
 		return;
 
-	prelen = snprintf(pre, sizeof pre, "%-8s %-5u ", debug_levels[type].name, (int) pid);
-	if (prelen > 0) {
-		len = prevalist_to_buf(&buffer, pre, prelen, fmt, args);
-		len = log_info_buf(buffer, len);
-		free(buffer);
-	}
+	len = vasprintf(&buf1, fmt, args);
+	if (len < 0)
+		return;
+	len = asprintf(&buf2, "%-8s %-5u %s", debug_levels[type].name,
+		       (int) pid, buf1);
+	free(buf1);
+	if (len < 0)
+		return;
+	len = log_info_buf(buf2, len);
+	free(buf2);
 }
 
-size_t log_info(const char *format, ...)
+ssize_t log_info(const char *format, ...)
 {
 	va_list args;
-	size_t ret;
+	ssize_t ret;
 
 	va_start(args, format);
 	ret = log_valist(format, args);
@@ -130,12 +81,13 @@ size_t __log_buf(struct buf_output *buf, const char *format, ...)
 {
 	char *buffer;
 	va_list args;
-	size_t len;
+	int len;
 
 	va_start(args, format);
-	len = valist_to_buf(&buffer, format, args);
+	len = vasprintf(&buffer, format, args);
 	va_end(args);
-
+	if (len < 0)
+		return 0;
 	len = buf_output_add(buf, buffer, len);
 	free(buffer);
 
@@ -150,15 +102,18 @@ int log_info_flush(void)
 	return fflush(f_out);
 }
 
-size_t log_err(const char *format, ...)
+ssize_t log_err(const char *format, ...)
 {
-	size_t ret, len;
+	ssize_t ret;
+	int len;
 	char *buffer;
 	va_list args;
 
 	va_start(args, format);
-	len = valist_to_buf(&buffer, format, args);
+	len = vasprintf(&buffer, format, args);
 	va_end(args);
+	if (len < 0)
+		return len;
 
 	if (is_backend) {
 		ret = fio_server_text_output(FIO_LOG_ERR, buffer, len);

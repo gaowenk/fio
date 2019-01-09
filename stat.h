@@ -211,6 +211,9 @@ struct thread_stat {
 	uint32_t first_error;
 	uint64_t total_err_count;
 
+	/* ZBD stats */
+	uint64_t nr_zone_resets;
+
 	uint64_t nr_block_infos;
 	uint32_t block_infos[MAX_NR_BLOCK_INFOS];
 
@@ -243,6 +246,9 @@ struct thread_stat {
 		uint64_t *ss_bw_data;
 		uint64_t pad5;
 	};
+
+	uint64_t cachehit;
+	uint64_t cachemiss;
 } __attribute__((packed));
 
 struct jobs_eta {
@@ -277,7 +283,7 @@ struct io_u_plat_entry {
 	uint64_t io_u_plat[FIO_IO_U_PLAT_NR];
 };
 
-extern struct fio_mutex *stat_mutex;
+extern struct fio_sem *stat_sem;
 
 extern struct jobs_eta *get_jobs_eta(bool force, size_t *size);
 
@@ -288,7 +294,6 @@ extern struct json_object * show_thread_status(struct thread_stat *ts, struct gr
 extern void show_group_stats(struct group_run_stats *rs, struct buf_output *);
 extern bool calc_thread_status(struct jobs_eta *je, int force);
 extern void display_thread_status(struct jobs_eta *je);
-extern void show_run_stats(void);
 extern void __show_run_stats(void);
 extern void __show_running_run_stats(void);
 extern void show_running_run_stats(void);
@@ -309,12 +314,12 @@ extern void update_rusage_stat(struct thread_data *);
 extern void clear_rusage_stat(struct thread_data *);
 
 extern void add_lat_sample(struct thread_data *, enum fio_ddir, unsigned long long,
-				unsigned int, uint64_t);
+				unsigned long long, uint64_t);
 extern void add_clat_sample(struct thread_data *, enum fio_ddir, unsigned long long,
-				unsigned int, uint64_t);
+				unsigned long long, uint64_t);
 extern void add_slat_sample(struct thread_data *, enum fio_ddir, unsigned long,
-				unsigned int, uint64_t);
-extern void add_agg_sample(union io_sample_data, enum fio_ddir, unsigned int);
+				unsigned long long, uint64_t);
+extern void add_agg_sample(union io_sample_data, enum fio_ddir, unsigned long long);
 extern void add_iops_sample(struct thread_data *, struct io_u *,
 				unsigned int);
 extern void add_bw_sample(struct thread_data *, struct io_u *,
@@ -324,7 +329,7 @@ extern void add_sync_clat_sample(struct thread_stat *ts,
 extern int calc_log_samples(void);
 
 extern struct io_log *agg_io_log[DDIR_RWDIR_CNT];
-extern int write_bw_log;
+extern bool write_bw_log;
 
 static inline bool nsec_to_usec(unsigned long long *min,
 				unsigned long long *max, double *mean,

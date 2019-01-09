@@ -1,6 +1,13 @@
 #ifndef ARCH_X86_64_H
 #define ARCH_X86_64_H
 
+#ifndef __NR_sys_io_uring_setup
+#define __NR_sys_io_uring_setup	335
+#endif
+#ifndef __NR_sys_io_uring_enter
+#define __NR_sys_io_uring_enter	336
+#endif
+
 static inline void do_cpuid(unsigned int *eax, unsigned int *ebx,
 			    unsigned int *ecx, unsigned int *edx)
 {
@@ -10,7 +17,7 @@ static inline void do_cpuid(unsigned int *eax, unsigned int *ebx,
 		: "memory");
 }
 
-#include "arch-x86-common.h"
+#include "arch-x86-common.h" /* IWYU pragma: export */
 
 #define FIO_ARCH	(arch_x86_64)
 
@@ -37,6 +44,7 @@ static inline unsigned long long get_cpu_clock(void)
 #define ARCH_HAVE_FFZ
 #define ARCH_HAVE_SSE4_2
 #define ARCH_HAVE_CPU_CLOCK
+#define ARCH_HAVE_IOURING
 
 #define RDRAND_LONG	".byte 0x48,0x0f,0xc7,0xf0"
 #define RDSEED_LONG	".byte 0x48,0x0f,0xc7,0xf8"

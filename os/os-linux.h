@@ -19,8 +19,14 @@
 #include <linux/fs.h>
 #include <scsi/sg.h>
 
+#ifdef ARCH_HAVE_CRC_CRYPTO
+#include <sys/auxv.h>
+#ifndef HWCAP_CRC32
+#define HWCAP_CRC32             (1 << 7)
+#endif /* HWCAP_CRC32 */
+#endif /* ARCH_HAVE_CRC_CRYPTO */
+
 #include "./os-linux-syscall.h"
-#include "binject.h"
 #include "../file.h"
 
 #ifndef __has_builtin         // Optional of course.
@@ -41,7 +47,6 @@
 #define FIO_HAVE_CGROUPS
 #define FIO_HAVE_FS_STAT
 #define FIO_HAVE_TRIM
-#define FIO_HAVE_BINJECT
 #define FIO_HAVE_GETTID
 #define FIO_USE_GENERIC_INIT_RANDOM_STATE
 #define FIO_HAVE_PWRITEV2
@@ -54,8 +59,6 @@
 #define OS_MAP_ANON		MAP_ANONYMOUS
 
 typedef cpu_set_t os_cpu_mask_t;
-
-typedef struct drand48_data os_random_state_t;
 
 #ifdef CONFIG_3ARG_AFFINITY
 #define fio_setaffinity(pid, cpumask)		\
@@ -163,19 +166,6 @@ static inline unsigned long long os_phys_mem(void)
 		return 0;
 
 	return (unsigned long long) pages * (unsigned long long) pagesize;
-}
-
-static inline void os_random_seed(unsigned long seed, os_random_state_t *rs)
-{
-	srand48_r(seed, rs);
-}
-
-static inline long os_random_long(os_random_state_t *rs)
-{
-	long val;
-
-	lrand48_r(rs, &val);
-	return val;
 }
 
 static inline int fio_lookup_raw(dev_t dev, int *majdev, int *mindev)
@@ -398,7 +388,7 @@ static inline bool fio_fallocate(struct fio_file *f, uint64_t offset,
 				 uint64_t len)
 {
 	int ret;
-	ret = fallocate(f->fd, 0, 0, len);
+	ret = fallocate(f->fd, 0, offset, len);
 	if (ret == 0)
 		return true;
 
@@ -409,5 +399,25 @@ static inline bool fio_fallocate(struct fio_file *f, uint64_t offset,
 	return false;
 }
 #endif
+
+#define FIO_HAVE_CPU_HAS
+static inline bool os_cpu_has(cpu_features feature)
+{
+	bool have_feature;
+	unsigned long fio_unused hwcap;
+
+	switch (feature) {
+#ifdef ARCH_HAVE_CRC_CRYPTO
+	case CPU_ARM64_CRC32C:
+		hwcap = getauxval(AT_HWCAP);
+		have_feature = (hwcap & HWCAP_CRC32) != 0;
+		break;
+#endif
+	default:
+		have_feature = false;
+	}
+
+	return have_feature;
+}
 
 #endif

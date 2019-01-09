@@ -18,7 +18,6 @@
 #include <asm/byteorder.h>
 
 #include "./os-linux-syscall.h"
-#include "binject.h"
 #include "../file.h"
 
 #ifndef __has_builtin         // Optional of course.
@@ -200,23 +199,6 @@ static inline unsigned long long os_phys_mem(void)
 		return 0;
 
 	return (unsigned long long) pages * (unsigned long long) pagesize;
-}
-
-typedef struct { unsigned short r[3]; } os_random_state_t;
-
-static inline void os_random_seed(unsigned long seed, os_random_state_t *rs)
-{
-	rs->r[0] = seed & 0xffff;
-	seed >>= 16;
-	rs->r[1] = seed & 0xffff;
-	seed >>= 16;
-	rs->r[2] = seed & 0xffff;
-	seed48(rs->r);
-}
-
-static inline long os_random_long(os_random_state_t *rs)
-{
-	return nrand48(rs->r);
 }
 
 #ifdef O_NOATIME

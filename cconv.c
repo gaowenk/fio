@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include "log.h"
 #include "thread_options.h"
 
 static void string_to_cpu(char **dst, const uint8_t *src)
@@ -36,6 +37,7 @@ static void free_thread_options_to_cpu(struct thread_options *o)
 	free(o->mmapfile);
 	free(o->read_iolog_file);
 	free(o->write_iolog_file);
+	free(o->merge_blktrace_file);
 	free(o->bw_log_file);
 	free(o->lat_log_file);
 	free(o->iops_log_file);
@@ -72,6 +74,7 @@ void convert_thread_options_to_cpu(struct thread_options *o,
 	string_to_cpu(&o->mmapfile, top->mmapfile);
 	string_to_cpu(&o->read_iolog_file, top->read_iolog_file);
 	string_to_cpu(&o->write_iolog_file, top->write_iolog_file);
+	string_to_cpu(&o->merge_blktrace_file, top->merge_blktrace_file);
 	string_to_cpu(&o->bw_log_file, top->bw_log_file);
 	string_to_cpu(&o->lat_log_file, top->lat_log_file);
 	string_to_cpu(&o->iops_log_file, top->iops_log_file);
@@ -109,16 +112,16 @@ void convert_thread_options_to_cpu(struct thread_options *o,
 	o->start_offset_percent = le32_to_cpu(top->start_offset_percent);
 
 	for (i = 0; i < DDIR_RWDIR_CNT; i++) {
-		o->bs[i] = le32_to_cpu(top->bs[i]);
-		o->ba[i] = le32_to_cpu(top->ba[i]);
-		o->min_bs[i] = le32_to_cpu(top->min_bs[i]);
-		o->max_bs[i] = le32_to_cpu(top->max_bs[i]);
+		o->bs[i] = le64_to_cpu(top->bs[i]);
+		o->ba[i] = le64_to_cpu(top->ba[i]);
+		o->min_bs[i] = le64_to_cpu(top->min_bs[i]);
+		o->max_bs[i] = le64_to_cpu(top->max_bs[i]);
 		o->bssplit_nr[i] = le32_to_cpu(top->bssplit_nr[i]);
 
 		if (o->bssplit_nr[i]) {
 			o->bssplit[i] = malloc(o->bssplit_nr[i] * sizeof(struct bssplit));
 			for (j = 0; j < o->bssplit_nr[i]; j++) {
-				o->bssplit[i][j].bs = le32_to_cpu(top->bssplit[i][j].bs);
+				o->bssplit[i][j].bs = le64_to_cpu(top->bssplit[i][j].bs);
 				o->bssplit[i][j].perc = le32_to_cpu(top->bssplit[i][j].perc);
 			}
 		}
@@ -161,8 +164,6 @@ void convert_thread_options_to_cpu(struct thread_options *o,
 	o->write_hint = le32_to_cpu(top->write_hint);
 	o->verify = le32_to_cpu(top->verify);
 	o->do_verify = le32_to_cpu(top->do_verify);
-	o->verifysort = le32_to_cpu(top->verifysort);
-	o->verifysort_nr = le32_to_cpu(top->verifysort_nr);
 	o->experimental_verify = le32_to_cpu(top->experimental_verify);
 	o->verify_state = le32_to_cpu(top->verify_state);
 	o->verify_interval = le32_to_cpu(top->verify_interval);
@@ -204,7 +205,7 @@ void convert_thread_options_to_cpu(struct thread_options *o,
 	o->gauss_dev.u.f = fio_uint64_to_double(le64_to_cpu(top->gauss_dev.u.i));
 	o->random_generator = le32_to_cpu(top->random_generator);
 	o->hugepage_size = le32_to_cpu(top->hugepage_size);
-	o->rw_min_bs = le32_to_cpu(top->rw_min_bs);
+	o->rw_min_bs = le64_to_cpu(top->rw_min_bs);
 	o->thinktime = le32_to_cpu(top->thinktime);
 	o->thinktime_spin = le32_to_cpu(top->thinktime_spin);
 	o->thinktime_blocks = le32_to_cpu(top->thinktime_blocks);
@@ -224,6 +225,7 @@ void convert_thread_options_to_cpu(struct thread_options *o,
 	o->zone_range = le64_to_cpu(top->zone_range);
 	o->zone_size = le64_to_cpu(top->zone_size);
 	o->zone_skip = le64_to_cpu(top->zone_skip);
+	o->zone_mode = le32_to_cpu(top->zone_mode);
 	o->lockmem = le64_to_cpu(top->lockmem);
 	o->offset_increment = le64_to_cpu(top->offset_increment);
 	o->number_ios = le64_to_cpu(top->number_ios);
@@ -290,6 +292,8 @@ void convert_thread_options_to_cpu(struct thread_options *o,
 	o->block_error_hist = le32_to_cpu(top->block_error_hist);
 	o->replay_align = le32_to_cpu(top->replay_align);
 	o->replay_scale = le32_to_cpu(top->replay_scale);
+	o->replay_time_scale = le32_to_cpu(top->replay_time_scale);
+	o->replay_skip = le32_to_cpu(top->replay_skip);
 	o->per_job_logs = le32_to_cpu(top->per_job_logs);
 	o->write_bw_log = le32_to_cpu(top->write_bw_log);
 	o->write_lat_log = le32_to_cpu(top->write_lat_log);
@@ -302,6 +306,12 @@ void convert_thread_options_to_cpu(struct thread_options *o,
 
 	for (i = 0; i < FIO_IO_U_LIST_MAX_LEN; i++)
 		o->percentile_list[i].u.f = fio_uint64_to_double(le64_to_cpu(top->percentile_list[i].u.i));
+
+	for (i = 0; i < FIO_IO_U_LIST_MAX_LEN; i++)
+		o->merge_blktrace_scalars[i].u.f = fio_uint64_to_double(le64_to_cpu(top->merge_blktrace_scalars[i].u.i));
+
+	for (i = 0; i < FIO_IO_U_LIST_MAX_LEN; i++)
+		o->merge_blktrace_iters[i].u.f = fio_uint64_to_double(le64_to_cpu(top->merge_blktrace_iters[i].u.i));
 #if 0
 	uint8_t cpumask[FIO_TOP_STR_MAX];
 	uint8_t verify_cpumask[FIO_TOP_STR_MAX];
@@ -328,6 +338,7 @@ void convert_thread_options_to_net(struct thread_options_pack *top,
 	string_to_net(top->mmapfile, o->mmapfile);
 	string_to_net(top->read_iolog_file, o->read_iolog_file);
 	string_to_net(top->write_iolog_file, o->write_iolog_file);
+	string_to_net(top->merge_blktrace_file, o->merge_blktrace_file);
 	string_to_net(top->bw_log_file, o->bw_log_file);
 	string_to_net(top->lat_log_file, o->lat_log_file);
 	string_to_net(top->iops_log_file, o->iops_log_file);
@@ -374,8 +385,6 @@ void convert_thread_options_to_net(struct thread_options_pack *top,
 	top->write_hint = cpu_to_le32(o->write_hint);
 	top->verify = cpu_to_le32(o->verify);
 	top->do_verify = cpu_to_le32(o->do_verify);
-	top->verifysort = cpu_to_le32(o->verifysort);
-	top->verifysort_nr = cpu_to_le32(o->verifysort_nr);
 	top->experimental_verify = cpu_to_le32(o->experimental_verify);
 	top->verify_state = cpu_to_le32(o->verify_state);
 	top->verify_interval = cpu_to_le32(o->verify_interval);
@@ -411,7 +420,7 @@ void convert_thread_options_to_net(struct thread_options_pack *top,
 	top->gauss_dev.u.i = __cpu_to_le64(fio_double_to_uint64(o->gauss_dev.u.f));
 	top->random_generator = cpu_to_le32(o->random_generator);
 	top->hugepage_size = cpu_to_le32(o->hugepage_size);
-	top->rw_min_bs = cpu_to_le32(o->rw_min_bs);
+	top->rw_min_bs = __cpu_to_le64(o->rw_min_bs);
 	top->thinktime = cpu_to_le32(o->thinktime);
 	top->thinktime_spin = cpu_to_le32(o->thinktime_spin);
 	top->thinktime_blocks = cpu_to_le32(o->thinktime_blocks);
@@ -480,6 +489,8 @@ void convert_thread_options_to_net(struct thread_options_pack *top,
 	top->block_error_hist = cpu_to_le32(o->block_error_hist);
 	top->replay_align = cpu_to_le32(o->replay_align);
 	top->replay_scale = cpu_to_le32(o->replay_scale);
+	top->replay_time_scale = cpu_to_le32(o->replay_time_scale);
+	top->replay_skip = cpu_to_le32(o->replay_skip);
 	top->per_job_logs = cpu_to_le32(o->per_job_logs);
 	top->write_bw_log = cpu_to_le32(o->write_bw_log);
 	top->write_lat_log = cpu_to_le32(o->write_lat_log);
@@ -487,10 +498,10 @@ void convert_thread_options_to_net(struct thread_options_pack *top,
 	top->write_hist_log = cpu_to_le32(o->write_hist_log);
 
 	for (i = 0; i < DDIR_RWDIR_CNT; i++) {
-		top->bs[i] = cpu_to_le32(o->bs[i]);
-		top->ba[i] = cpu_to_le32(o->ba[i]);
-		top->min_bs[i] = cpu_to_le32(o->min_bs[i]);
-		top->max_bs[i] = cpu_to_le32(o->max_bs[i]);
+		top->bs[i] = __cpu_to_le64(o->bs[i]);
+		top->ba[i] = __cpu_to_le64(o->ba[i]);
+		top->min_bs[i] = __cpu_to_le64(o->min_bs[i]);
+		top->max_bs[i] = __cpu_to_le64(o->max_bs[i]);
 		top->bssplit_nr[i] = cpu_to_le32(o->bssplit_nr[i]);
 
 		if (o->bssplit_nr[i]) {
@@ -501,7 +512,7 @@ void convert_thread_options_to_net(struct thread_options_pack *top,
 				bssplit_nr = BSSPLIT_MAX;
 			}
 			for (j = 0; j < bssplit_nr; j++) {
-				top->bssplit[i][j].bs = cpu_to_le32(o->bssplit[i][j].bs);
+				top->bssplit[i][j].bs = cpu_to_le64(o->bssplit[i][j].bs);
 				top->bssplit[i][j].perc = cpu_to_le32(o->bssplit[i][j].perc);
 			}
 		}
@@ -547,6 +558,7 @@ void convert_thread_options_to_net(struct thread_options_pack *top,
 	top->zone_range = __cpu_to_le64(o->zone_range);
 	top->zone_size = __cpu_to_le64(o->zone_size);
 	top->zone_skip = __cpu_to_le64(o->zone_skip);
+	top->zone_mode = __cpu_to_le32(o->zone_mode);
 	top->lockmem = __cpu_to_le64(o->lockmem);
 	top->ddir_seq_add = __cpu_to_le64(o->ddir_seq_add);
 	top->file_size_low = __cpu_to_le64(o->file_size_low);
@@ -562,6 +574,12 @@ void convert_thread_options_to_net(struct thread_options_pack *top,
 
 	for (i = 0; i < FIO_IO_U_LIST_MAX_LEN; i++)
 		top->percentile_list[i].u.i = __cpu_to_le64(fio_double_to_uint64(o->percentile_list[i].u.f));
+
+	for (i = 0; i < FIO_IO_U_LIST_MAX_LEN; i++)
+		top->merge_blktrace_scalars[i].u.i = __cpu_to_le64(fio_double_to_uint64(o->merge_blktrace_scalars[i].u.f));
+
+	for (i = 0; i < FIO_IO_U_LIST_MAX_LEN; i++)
+		top->merge_blktrace_iters[i].u.i = __cpu_to_le64(fio_double_to_uint64(o->merge_blktrace_iters[i].u.f));
 #if 0
 	uint8_t cpumask[FIO_TOP_STR_MAX];
 	uint8_t verify_cpumask[FIO_TOP_STR_MAX];

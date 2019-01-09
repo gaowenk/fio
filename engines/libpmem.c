@@ -1,5 +1,5 @@
 /*
- * libpmem: IO engine that uses NVML libpmem to read and write data
+ * libpmem: IO engine that uses PMDK libpmem to read and write data
  *
  * Copyright (C) 2017 Nippon Telegraph and Telephone Corporation.
  *
@@ -424,10 +424,10 @@ static int fio_libpmem_prep(struct thread_data *td, struct io_u *io_u)
 	/*
 	 * It fits within existing mapping, use it
 	 */
-	dprint(FD_IO," io_u->offset %lld : fdd->libpmem_off %ld : "
-			"io_u->buflen %ld : fdd->libpmem_sz %ld\n",
-			io_u->offset, fdd->libpmem_off,
-			io_u->buflen, fdd->libpmem_sz);
+	dprint(FD_IO," io_u->offset %llu : fdd->libpmem_off %llu : "
+			"io_u->buflen %llu : fdd->libpmem_sz %llu\n",
+			io_u->offset, (unsigned long long) fdd->libpmem_off,
+			io_u->buflen, (unsigned long long) fdd->libpmem_sz);
 
 	if (io_u->offset >= fdd->libpmem_off &&
 	    (io_u->offset + io_u->buflen <=
@@ -457,7 +457,8 @@ done:
 	return 0;
 }
 
-static int fio_libpmem_queue(struct thread_data *td, struct io_u *io_u)
+static enum fio_q_status fio_libpmem_queue(struct thread_data *td,
+					   struct io_u *io_u)
 {
 	fio_ro_check(td, io_u);
 	io_u->error = 0;
@@ -498,7 +499,7 @@ static int fio_libpmem_init(struct thread_data *td)
 {
 	struct thread_options *o = &td->o;
 
-	dprint(FD_IO,"o->rw_min_bs %d \n o->fsync_blocks %d \n o->fdatasync_blocks %d \n",
+	dprint(FD_IO,"o->rw_min_bs %llu \n o->fsync_blocks %d \n o->fdatasync_blocks %d \n",
 			o->rw_min_bs,o->fsync_blocks,o->fdatasync_blocks);
 	dprint(FD_IO, "DEBUG fio_libpmem_init\n");
 

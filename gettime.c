@@ -2,15 +2,9 @@
  * Clock functions
  */
 
-#include <unistd.h>
 #include <math.h>
-#include <sys/time.h>
-#include <time.h>
 
 #include "fio.h"
-#include "smalloc.h"
-
-#include "hash.h"
 #include "os/os.h"
 
 #if defined(ARCH_HAVE_CPU_CLOCK)
@@ -243,16 +237,15 @@ static unsigned long get_cycles_per_msec(void)
 	c_s = get_cpu_clock();
 	do {
 		__fio_gettime(&e);
+		c_e = get_cpu_clock();
 
-		elapsed = utime_since(&s, &e);
-		if (elapsed >= 1280) {
-			c_e = get_cpu_clock();
+		elapsed = ntime_since(&s, &e);
+		if (elapsed >= 1280000)
 			break;
-		}
 	} while (1);
 
 	fio_clock_source = old_cs;
-	return (c_e - c_s) * 1000 / elapsed;
+	return (c_e - c_s) * 1000000 / elapsed;
 }
 
 #define NR_TIME_ITERS	50
@@ -305,10 +298,10 @@ static int calibrate_cpu_clock(void)
 
 	avg /= samples;
 	cycles_per_msec = avg;
-	dprint(FD_TIME, "avg: %llu\n", (unsigned long long) avg);
-	dprint(FD_TIME, "min=%llu, max=%llu, mean=%f, S=%f\n",
+	dprint(FD_TIME, "min=%llu, max=%llu, mean=%f, S=%f, N=%d\n",
 			(unsigned long long) minc,
-			(unsigned long long) maxc, mean, S);
+			(unsigned long long) maxc, mean, S, NR_TIME_ITERS);
+	dprint(FD_TIME, "trimmed mean=%llu, N=%d\n", (unsigned long long) avg, samples);
 
 	max_ticks = MAX_CLOCK_SEC * cycles_per_msec * 1000ULL;
 	max_mult = ULLONG_MAX / max_ticks;
@@ -379,7 +372,7 @@ static int calibrate_cpu_clock(void)
 #endif // ARCH_HAVE_CPU_CLOCK
 
 #ifndef CONFIG_TLS_THREAD
-void fio_local_clock_init(int is_thread)
+void fio_local_clock_init(void)
 {
 	struct tv_valid *t;
 
@@ -395,7 +388,7 @@ static void kill_tv_tls_key(void *data)
 	free(data);
 }
 #else
-void fio_local_clock_init(int is_thread)
+void fio_local_clock_init(void)
 {
 }
 #endif
@@ -563,8 +556,7 @@ struct clock_thread {
 	pthread_t thread;
 	int cpu;
 	int debug;
-	pthread_mutex_t lock;
-	pthread_mutex_t started;
+	struct fio_sem lock;
 	unsigned long nr_entries;
 	uint32_t *seq;
 	struct clock_entry *entries;
@@ -600,8 +592,7 @@ static void *clock_thread_fn(void *data)
 		goto err;
 	}
 
-	pthread_mutex_lock(&t->lock);
-	pthread_mutex_unlock(&t->started);
+	fio_sem_down(&t->lock);
 
 	first = get_cpu_clock();
 	c = &t->entries[0];
@@ -702,9 +693,7 @@ int fio_monotonic_clocktest(int debug)
 		t->seq = &seq;
 		t->nr_entries = nr_entries;
 		t->entries = &entries[i * nr_entries];
-		pthread_mutex_init(&t->lock, NULL);
-		pthread_mutex_init(&t->started, NULL);
-		pthread_mutex_lock(&t->lock);
+		__fio_sem_init(&t->lock, FIO_SEM_LOCKED);
 		if (pthread_create(&t->thread, NULL, clock_thread_fn, t)) {
 			failed++;
 			nr_cpus = i;
@@ -715,13 +704,7 @@ int fio_monotonic_clocktest(int debug)
 	for (i = 0; i < nr_cpus; i++) {
 		struct clock_thread *t = &cthreads[i];
 
-		pthread_mutex_lock(&t->started);
-	}
-
-	for (i = 0; i < nr_cpus; i++) {
-		struct clock_thread *t = &cthreads[i];
-
-		pthread_mutex_unlock(&t->lock);
+		fio_sem_up(&t->lock);
 	}
 
 	for (i = 0; i < nr_cpus; i++) {
@@ -731,6 +714,7 @@ int fio_monotonic_clocktest(int debug)
 		pthread_join(t->thread, &ret);
 		if (ret)
 			failed++;
+		__fio_sem_remove(&t->lock);
 	}
 	free(cthreads);
 

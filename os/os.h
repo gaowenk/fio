@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#include "../arch/arch.h"
+#include "../arch/arch.h" /* IWYU pragma: export */
 #include "../lib/types.h"
 
 enum {
@@ -27,6 +27,11 @@ enum {
 	os_nr,
 };
 
+typedef enum {
+        CPU_ARM64_CRC32C,
+} cpu_features;
+
+/* IWYU pragma: begin_exports */
 #if defined(__ANDROID__)
 #include "os-android.h"
 #elif defined(__linux__)
@@ -67,6 +72,7 @@ typedef struct aiocb os_aiocb_t;
 #ifndef CONFIG_STRLCAT
 #include "../oslib/strlcat.h"
 #endif
+/* IWYU pragma: end_exports */
 
 #ifdef MSG_DONTWAIT
 #define OS_MSG_DONTWAIT	MSG_DONTWAIT
@@ -292,23 +298,6 @@ static inline int blockdev_size(struct fio_file *f, unsigned long long *bytes)
 }
 #endif
 
-#ifdef FIO_USE_GENERIC_RAND
-typedef unsigned int os_random_state_t;
-
-static inline void os_random_seed(unsigned long seed, os_random_state_t *rs)
-{
-	srand(seed);
-}
-
-static inline long os_random_long(os_random_state_t *rs)
-{
-	long val;
-
-	val = rand_r(rs);
-	return val;
-}
-#endif
-
 #ifdef FIO_USE_GENERIC_INIT_RANDOM_STATE
 static inline int init_random_seeds(unsigned long *rand_seeds, int size)
 {
@@ -383,6 +372,13 @@ static inline bool fio_fallocate(struct fio_file *f, uint64_t offset, uint64_t l
 
 #if defined(CONFIG_POSIX_FALLOCATE) || defined(FIO_HAVE_NATIVE_FALLOCATE)
 # define FIO_HAVE_ANY_FALLOCATE
+#endif
+
+#ifndef FIO_HAVE_CPU_HAS
+static inline bool os_cpu_has(cpu_features feature)
+{
+	return false;
+}
 #endif
 
 #endif
