@@ -421,6 +421,15 @@ void fio_clock_init(void)
 	dprint(FD_TIME, "gettime: clocksource=%d\n", (int) fio_clock_source);
 }
 
+void print_now(void)
+{
+	time_t curtime;
+
+	time(&curtime);
+	printf("%s", ctime(&curtime));
+	return;
+}
+
 uint64_t ntime_since(const struct timespec *s, const struct timespec *e)
 {
        int64_t sec, nsec;

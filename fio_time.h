@@ -9,6 +9,7 @@
 #include "lib/types.h"
 
 struct thread_data;
+extern void print_now(void);
 extern uint64_t ntime_since(const struct timespec *, const struct timespec *);
 extern uint64_t ntime_since_now(const struct timespec *);
 extern uint64_t utime_since(const struct timespec *, const struct timespec *);

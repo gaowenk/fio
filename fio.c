@@ -29,6 +29,8 @@ int main(int argc, char *argv[], char *envp[])
 
 	compiletime_assert(TD_NR <= TD_ENG_FLAG_SHIFT, "TD_ENG_FLAG_SHIFT");
 
+	print_now();
+
 	if (initialize_fio(envp))
 		return 1;
 
